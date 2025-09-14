@@ -1,0 +1,19 @@
+{
+  "name": "todo-list-nuxt",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "packageManager": "bun@1.1.30",
+  "scripts": {
+    "dev": "nuxt dev",
+    "dev:bx": "bunx --bun nuxt dev",
+    "build": "nuxt build",
+    "preview": "nuxt preview",
+    "prepare": "nuxt prepare",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "nuxt": "^3.13.0"
+  },
+  "devDependencies": {}
+}
