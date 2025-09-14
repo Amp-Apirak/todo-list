@@ -13,7 +13,10 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
-    "nuxt": "^3.13.0"
+    "nuxt": "^3.13.0",
+    "nodemailer": "^6.9.13"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "acorn": "^8.12.1"
+  }
 }

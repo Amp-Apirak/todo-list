@@ -13,6 +13,13 @@
         @keydown.enter.prevent="addTodo"
         aria-label="เพิ่มงานใหม่"
       />
+      <!-- ผู้บันทึก -->
+      <input v-model="newCreator" type="text" placeholder="ผู้บันทึก" aria-label="ผู้บันทึก" />
+      <!-- ผู้ดำเนินการ -->
+      <input v-model="newAssignee" type="text" placeholder="ผู้ดำเนินการ" aria-label="ผู้ดำเนินการ" />
+      <!-- วันเวลาเริ่มต้น/สิ้นสุด -->
+      <input v-model="newStart" type="datetime-local" aria-label="วันเวลาเริ่มต้น" />
+      <input v-model="newEnd" type="datetime-local" aria-label="วันเวลาสิ้นสุด" />
       <button type="submit" :disabled="!canAdd">เพิ่ม</button>
     </form>
 
@@ -39,6 +46,9 @@
             {{ todo.text }}
             <!-- แสดงวันเวลาที่บันทึก -->
             <small class="meta">บันทึกเมื่อ: {{ formatDate(todo.createdAt) }}</small>
+            <!-- ช่วงเวลาเริ่ม-สิ้นสุด และผู้เกี่ยวข้อง -->
+            <small class="meta">เริ่ม: {{ formatDate(todo.startAt) }} · สิ้นสุด: {{ formatDate(todo.endAt) }}</small>
+            <small class="meta">ผู้บันทึก: {{ todo.creator || '-' }} · ผู้ดำเนินการ: {{ todo.assignee || '-' }}</small>
           </span>
           <div class="actions">
             <button @click="startEdit(todo)" aria-label="แก้ไข">แก้ไข</button>
@@ -48,14 +58,14 @@
 
         <!-- โหมดแก้ไข -->
         <template v-else>
-          <input
-            v-model="todo.editText"
-            type="text"
-            class="edit-input"
-            @keydown.enter.prevent="saveEdit(todo)"
-            @keydown.esc.prevent="cancelEdit(todo)"
-            aria-label="แก้ไขงาน"
-          />
+          <!-- แก้ไขชื่องาน -->
+          <input v-model="todo.editText" type="text" class="edit-input" @keydown.enter.prevent="saveEdit(todo)" @keydown.esc.prevent="cancelEdit(todo)" aria-label="แก้ไขงาน" />
+          <!-- แก้ไขผู้บันทึก/ผู้ดำเนินการ -->
+          <input v-model="todo.editCreator" type="text" placeholder="ผู้บันทึก" aria-label="แก้ไขผู้บันทึก" />
+          <input v-model="todo.editAssignee" type="text" placeholder="ผู้ดำเนินการ" aria-label="แก้ไขผู้ดำเนินการ" />
+          <!-- แก้ไขวันเวลาเริ่ม/สิ้นสุด -->
+          <input v-model="todo.editStart" type="datetime-local" aria-label="แก้ไขวันเวลาเริ่ม" />
+          <input v-model="todo.editEnd" type="datetime-local" aria-label="แก้ไขวันเวลาสิ้นสุด" />
           <div class="actions">
             <button @click="saveEdit(todo)" aria-label="บันทึก">บันทึก</button>
             <button class="ghost" @click="cancelEdit(todo)" aria-label="ยกเลิก">ยกเลิก</button>
@@ -76,14 +86,28 @@ type Todo = {
   text: string
   // เวลาที่บันทึกรายการ (มิลลิวินาที)
   createdAt: number
+  // วันเวลาเริ่มต้น/สิ้นสุด
+  startAt?: number | null
+  endAt?: number | null
+  // ผู้เกี่ยวข้อง
+  creator?: string
+  assignee?: string
   done: boolean // สถานะเสร็จแล้ว
   editing: boolean
   editText?: string
+  editCreator?: string
+  editAssignee?: string
+  editStart?: string
+  editEnd?: string
 }
 
 // สร้าง state สำหรับรายการงาน และข้อความงานใหม่
 const todos = ref<Todo[]>([])
 const newText = ref('')
+const newCreator = ref('')
+const newAssignee = ref('')
+const newStart = ref<string>('')
+const newEnd = ref<string>('')
 
 // key สำหรับเก็บข้อมูลใน localStorage
 const STORAGE_KEY = 'nuxt_todos_v1'
@@ -102,6 +126,10 @@ onMounted(() => {
         id: t.id as number,
         text: t.text as string,
         createdAt: typeof t.createdAt === 'number' ? t.createdAt : Date.now(),
+        startAt: (t as any).startAt ?? null,
+        endAt: (t as any).endAt ?? null,
+        creator: (t as any).creator ?? '',
+        assignee: (t as any).assignee ?? '',
         done: Boolean(t && (t as any).done),
         editing: false
       }))
@@ -116,7 +144,7 @@ onMounted(() => {
 watch(
   todos,
   (list) => {
-    const compact = list.map(({ id, text, createdAt, done }) => ({ id, text, createdAt, done }))
+    const compact = list.map(({ id, text, createdAt, startAt, endAt, creator, assignee, done }) => ({ id, text, createdAt, startAt, endAt, creator, assignee, done }))
     localStorage.setItem(STORAGE_KEY, JSON.stringify(compact))
   },
   { deep: true }
@@ -130,17 +158,32 @@ function addTodo() {
     id: Date.now(), // ใช้เวลาเป็น id แบบง่าย ๆ
     text,
     createdAt: Date.now(), // วันเวลาที่บันทึก
+    startAt: parseLocalDate(newStart.value),
+    endAt: parseLocalDate(newEnd.value),
+    creator: newCreator.value.trim(),
+    assignee: newAssignee.value.trim(),
     done: false,
     editing: false
   }
   todos.value.unshift(t)
   newText.value = ''
+  newCreator.value = ''
+  newAssignee.value = ''
+  newStart.value = ''
+  newEnd.value = ''
+
+  // แจ้งเตือนอีเมล (สร้างใหม่)
+  notify('create', t)
 }
 
 // ฟังก์ชัน: เริ่มแก้ไขงาน
 function startEdit(todo: Todo) {
   todo.editing = true
   todo.editText = todo.text
+  todo.editCreator = todo.creator || ''
+  todo.editAssignee = todo.assignee || ''
+  todo.editStart = toLocalInputValue(todo.startAt)
+  todo.editEnd = toLocalInputValue(todo.endAt)
 }
 
 // ฟังก์ชัน: บันทึกผลการแก้ไข
@@ -152,8 +195,19 @@ function saveEdit(todo: Todo) {
     return
   }
   todo.text = text
+  todo.creator = (todo.editCreator || '').trim()
+  todo.assignee = (todo.editAssignee || '').trim()
+  todo.startAt = parseLocalDate(todo.editStart || '')
+  todo.endAt = parseLocalDate(todo.editEnd || '')
   todo.editing = false
   delete todo.editText
+  delete todo.editCreator
+  delete todo.editAssignee
+  delete todo.editStart
+  delete todo.editEnd
+
+  // แจ้งเตือนอีเมล (แก้ไข)
+  notify('update', todo)
 }
 
 // ฟังก์ชัน: ยกเลิกการแก้ไข (คืนค่าเดิม)
@@ -164,7 +218,9 @@ function cancelEdit(todo: Todo) {
 
 // ฟังก์ชัน: ลบงาน
 function removeTodo(id: number) {
+  const t = todos.value.find((x) => x.id === id)
   todos.value = todos.value.filter((t) => t.id !== id)
+  if (t) notify('delete', t)
 }
 
 // ฟังก์ชันช่วยฟอร์แมตวันเวลาให้อ่านง่าย (ภาษาไทย)
@@ -176,6 +232,39 @@ function formatDate(ts: number) {
     }).format(ts)
   } catch (e) {
     return new Date(ts).toLocaleString()
+  }
+}
+
+// แปลง timestamp -> รูปแบบอินพุต datetime-local
+function toLocalInputValue(ts?: number | null) {
+  if (!ts) return ''
+  const d = new Date(ts)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const yyyy = d.getFullYear()
+  const mm = pad(d.getMonth() + 1)
+  const dd = pad(d.getDate())
+  const hh = pad(d.getHours())
+  const mi = pad(d.getMinutes())
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`
+}
+
+// แปลงค่าจาก datetime-local -> timestamp (ms)
+function parseLocalDate(v?: string) {
+  if (!v) return null
+  const ts = Date.parse(v)
+  return isNaN(ts) ? null : ts
+}
+
+// เรียก API แจ้งอีเมล
+async function notify(action: 'create' | 'update' | 'delete', todo: Todo) {
+  try {
+    await $fetch('/api/notify', {
+      method: 'POST',
+      body: { action, todo }
+    })
+  } catch (e) {
+    // เงียบไว้เพื่อไม่กระทบ UX ถ้าอีเมลล้มเหลว
+    console.warn('notify failed', e)
   }
 }
 
@@ -386,6 +475,7 @@ h1 {
   border-radius: 14px;
   padding: 0.6rem;
   box-shadow: 0 6px 20px rgba(2, 6, 23, 0.06);
+  flex-wrap: wrap;
 }
 
 input[type="text"] {
@@ -394,6 +484,13 @@ input[type="text"] {
   border-color: var(--border);
   border-radius: 10px;
   transition: box-shadow 160ms ease, border-color 160ms ease;
+}
+input[type="datetime-local"] {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.5rem 0.6rem;
 }
 input::placeholder { color: var(--muted); }
 input:focus {
